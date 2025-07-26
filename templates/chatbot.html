@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Assistant Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(to right, #f3e8ff, #e9d5ff);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 1.5rem;
+        }
+
+        .app-container {
+            display: flex;
+            max-width: 960px;
+            width: 100%;
+            height: 85vh;
+            border-radius: 1rem;
+            overflow: hidden;
+            background: #faf5ff;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid #c084fc;
+        }
+
+        .history-list {
+            width: 280px;
+            background: #f5e8ff;
+            border-right: 1px solid #d8b4fe;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            padding-right: 0.5rem;
+        }
+
+        .message {
+            margin: 0.5rem 0;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            max-width: 80%;
+            line-height: 1.5;
+        }
+
+        .user {
+            background-color: #e9d5ff;
+            align-self: flex-end;
+        }
+
+        .bot {
+            background-color: #d8b4fe;
+            align-self: flex-start;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #c084fc;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 0.75rem 1.2rem;
+            background-color: #c084fc;
+            color: #fff;
+            font-weight: 600;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        button:hover {
+            background-color: #a855f7;
+        }
+
+        button:disabled {
+            background-color: #e9d5ff;
+            color: #aaa;
+            cursor: not-allowed;
+        }
+
+        .history-entry {
+            background: #ede9fe;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            position: relative;
+        }
+
+        .history-entry:hover {
+            background: #ddd6fe;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            border: none;
+            background: transparent;
+            font-size: 0.9rem;
+            color: #888;
+            cursor: pointer;
+        }
+
+        .copy-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-left: 0.5rem;
+        }
+
+        .feedback {
+            margin-top: 4px;
+        }
+
+        .feedback button {
+            font-size: 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .typing .spinner {
+            width: 24px;
+            height: 24px;
+            border: 4px solid #d8b4fe;
+            border-top: 4px solid #c084fc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="history-list">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                <strong>History</strong>
+                <button onclick="clearHistory()">Clear</button>
+            </div>
+            <div id="historyList"></div>
+        </div>
+        <div class="chat-container">
+            <div class="controls">
+                <button onclick="newChat()">New Chat</button>
+            </div>
+            <div class="messages" id="chatBox"></div>
+            <div class="input-area">
+                <input id="userInput" type="text" placeholder="Ask anything..." />
+                <button id="sendBtn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const historyList = document.getElementById('historyList');
+        const history = [];
+
+        function scrollToBottom() {
+            chatBox.lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function appendMessage(text, role) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            const timestamp = new Date().toLocaleTimeString();
+            msg.innerHTML = `
+        <div>
+          <div><strong>${timestamp}</strong></div>
+          <div>${role === 'bot' ? marked.parse(text) : text}</div>
+          ${role === 'bot' ? `
+            <div class="feedback">
+              <button onclick="sendFeedback(${history.length}, 'up')">👍</button>
+              <button onclick="sendFeedback(${history.length}, 'down')">👎</button>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText(\`${text.replace(/`/g, '\\`')}\`)">📋</button>
+            </div>` : ''}
+        </div>`;
+            chatBox.appendChild(msg);
+            scrollToBottom();
+        }
+
+        function appendTypingIndicator() {
+            const typing = document.createElement('div');
+            typing.id = 'typing';
+            typing.className = 'message bot typing';
+            typing.innerHTML = `<div class="spinner"></div>`;
+            chatBox.appendChild(typing);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const typing = document.getElementById('typing');
+            if (typing) typing.remove();
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+            appendMessage(text, 'user');
+            history.push(['user', text]);
+            userInput.value = '';
+            sendBtn.disabled = true;
+            appendTypingIndicator();
+
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, history })
+                });
+                const data = await res.json();
+                removeTypingIndicator();
+                appendMessage(data.response, 'bot');
+                history.push(['bot', data.response]);
+            } catch {
+                removeTypingIndicator();
+                appendMessage("Oops, something went wrong.", 'bot');
+            }
+
+            updateHistoryList();
+            sendBtn.disabled = false;
+        }
+
+        function newChat() {
+            history.length = 0;
+            chatBox.innerHTML = '';
+            historyList.innerHTML = '';
+            localStorage.removeItem('chatHistory');
+        }
+
+        function updateHistoryList() {
+            historyList.innerHTML = '';
+            for (let i = 0; i < history.length; i += 2) {
+                const userMsg = history[i]?.[1] || '';
+                const botMsg = history[i + 1]?.[1] || '';
+                const item = document.createElement('div');
+                item.className = 'history-entry';
+                item.innerHTML = `
+          <div><strong>You:</strong> ${userMsg.slice(0, 40)}</div>
+          <div><strong>Bot:</strong> ${botMsg.slice(0, 40)}</div>
+          <button class="delete-btn" onclick="deleteHistory(${i})">✕</button>`;
+                item.onclick = () => loadPreviousMessages(i);
+                historyList.appendChild(item);
+            }
+        }
+
+        function clearHistory() {
+            history.length = 0;
+            chatBox.innerHTML = '';
+            historyList.innerHTML = '';
+            localStorage.removeItem('chatHistory');
+        }
+
+        function deleteHistory(index) {
+            event.stopPropagation();
+            history.splice(index, 2);
+            updateHistoryList();
+            localStorage.setItem('chatHistory', JSON.stringify(history));
+        }
+
+        function loadPreviousMessages(startIndex) {
+            chatBox.innerHTML = '';
+            for (let i = 0; i <= startIndex + 1 && i < history.length; i++) {
+                appendMessage(history[i][1], history[i][0]);
+            }
+            scrollToBottom();
+        }
+
+        function sendFeedback(index, vote) {
+            fetch('/feedback', {
+                method: 'POST',
+                body: JSON.stringify({ message: history[index], vote }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        window.onload = () => {
+            const saved = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+            saved.forEach(([role, text]) => appendMessage(text, role));
+            history.push(...saved);
+            updateHistoryList();
+        };
+
+        window.onbeforeunload = () => {
+            localStorage.setItem('chatHistory', JSON.stringify(history));
+        };
+    </script>
+</body>
+
+</html>
